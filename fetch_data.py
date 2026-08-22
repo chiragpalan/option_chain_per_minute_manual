@@ -7,7 +7,6 @@ def fetch_nifty_option_chain_via_browser():
     print("[1/3] Launching Headless Browser via Playwright...")
     
     with sync_playwright() as p:
-        # Launching Chromium with custom flags to evade common detection
         browser = p.chromium.launch(
             headless=True,
             args=[
@@ -17,45 +16,39 @@ def fetch_nifty_option_chain_via_browser():
             ]
         )
         
-        # Open a fresh context simulating a standard windows desktop browser
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             viewport={"width": 1920, "height": 1080}
         )
         
         page = context.new_page()
-        api_data = []
+        
+        # Dictionary container to hold the single active data payload
+        payload_container = {"json_data": None}
 
-        # Intercept background network responses to catch the option chain JSON payload
+        # Intercept background network responses
         def handle_response(response):
             if "api/option-chain-indices?symbol=NIFTY" in response.url:
                 print(f"-> Target network request intercepted! HTTP Status: {response.status_code}")
                 if response.status_code == 200:
                     try:
-                        api_data.append(response.json())
+                        payload_container["json_data"] = response.json()
+                        print("-> Successfully loaded JSON payload into context.")
                     except Exception as e:
                         print(f"-> Failed to parse network stream as JSON: {e}")
 
         page.on("response", handle_response)
 
         try:
-            # Navigate to the user-facing option chain page directly
             target_url = "https://nseindia.com"
             print(f"-> Navigating browser to web page: {target_url}")
             
-            # Wait until network activity settles
             page.goto(target_url, wait_until="networkidle", timeout=60000)
             
-            # Give background requests an extra 5 seconds to load and stream completely
             print("-> Waiting for background API streams to complete...")
-            time.sleep(5)
+            time.sleep(6)  # Generous window for cloud latency
             
-            if api_data:
-                print("-> SUCCESS: Option chain extracted cleanly from browser memory.")
-                return api_data[0]
-            else:
-                print("-> ERROR: Browser loaded page, but the target API request wasn't caught or it failed.")
-                return None
+            return payload_container["json_data"]
                 
         except Exception as e:
             print(f"-> CRITICAL EXCEPTION during browser session: {e}")
@@ -65,9 +58,9 @@ def fetch_nifty_option_chain_via_browser():
             browser.close()
 
 def generate_markdown_table(data):
-    if not data:
-        print("[Skipping Table Generation] No valid payload data provided.")
-        return "### ❌ Error: Could not fetch live data from NSE due to Akamai IP Block."
+    if not data or "records" not in data:
+        print("[Skipping Table Generation] No valid payload dictionary provided.")
+        return "### ❌ Error: Could not fetch live data from NSE due to Akamai structural blocks."
 
     try:
         underlying_value = data["records"]["underlyingValue"]
@@ -85,7 +78,7 @@ def generate_markdown_table(data):
         markdown += "| CE OI | CE Change OI | CE LTP | Strike Price | PE LTP | PE Change OI | PE OI |\n"
         markdown += "| :--- | :--- | :--- | :---: | :--- | :--- | :--- |\n"
 
-        for row in all_records[:10]:
+        for row in all_records[:12]:  # Shows 12 key rows surrounding ATM strike
             strike = row["strikePrice"]
             ce = row.get("CE", {})
             pe = row.get("PE", {})
@@ -124,7 +117,7 @@ def update_readme(new_content):
     
     with open(readme_path, "w") as f:
         f.write(updated_content)
-    print("-> SUCCESS: README.md updated.")
+    print("-> SUCCESS: README.md updated successfully with fresh tables.")
 
 if __name__ == "__main__":
     raw_data = fetch_nifty_option_chain_via_browser()
