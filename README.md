@@ -4,7 +4,7 @@ This project fetches data directly from the NSE website using GitHub Actions.
 
 <!-- NSE_DATA_START -->
 
-### ❌ Error: Could not fetch live data from NSE.
+### ❌ Error: Could not fetch live data from NSE due to Akamai IP Block.
 
 <!-- NSE_DATA_END -->
 
